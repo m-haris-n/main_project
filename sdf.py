@@ -5,70 +5,10 @@ import math
 import cv2
 import threading
 
+from constants import ACCESS_POINTS, ROAM_KEYWORDS, CLASSIDS, CLASSNAMES
 from AudioIO import AudioIn, AudioOut
 
-ACCESS_POINTS = ["door", "doors", "stairs", "go out", "exit", "enter", "go in"]
-ROAM_KEYWORDS = [
-    "walk",
-    "stroll",
-    "obstacle",
-]
-
-CLASSNAMES = {
-    34: "bed",
-    57: "Bottle",
-    100: "Ceiling fan",
-    104: "Chair",
-    114: "Closet",
-    136: "Couch",
-    147: "Cupboard",
-    148: "Curtain",
-    153: "Desk",
-    164: "Door",
-    165: "Door handle",
-    214: "Gas stove",
-    261: "Human body",
-    302: "Land vehicle",
-    309: "Light switch",
-    322: "Man",
-    339: "Mobile phone",
-    419: "Refrigerator",
-    453: "Shelf",
-    489: "Stairs",
-    494: "Stool",
-    514: "Table",
-    526: "Telephone",
-    583: "Wheelchair",
-    594: "Woman",
-}
-
-CLASSIDS = [
-    34,
-    57,
-    100,
-    104,
-    114,
-    136,
-    147,
-    148,
-    153,
-    164,
-    165,
-    214,
-    261,
-    302,
-    309,
-    322,
-    339,
-    419,
-    453,
-    489,
-    494,
-    514,
-    526,
-    583,
-    594,
-]
+# ENGINES INITIALIZATION
 
 engine = pyttsx3.init()
 engine.setProperty("rate", 145)
@@ -77,54 +17,45 @@ model = YOLO("model.pt")
 cam = cv2.VideoCapture(0)
 
 
-def AudioIn():
-    try:
-        r.adjust_for_ambient_noise(source, duration=0.5)
-        audio = r.listen(source)
-        userinput = r.recognize_google(audio)
-        return userinput
-    except sr.RequestError as e:
-        print("Could not request results; {0}".format(e))
-        return None
-    except sr.UnknownValueError:
-        print("unknown error occurred")
-        return None
+# GLOBAL VARS
+
+stop_flag = False
+doorReached = False
+
+
+# FUNCTIONS
 
 
 def StopLooking():
-    output = False
-    try:
-        with sr.Microphone() as source:
-            r.adjust_for_ambient_noise(source, duration=0.5)
-            audio = r.listen(source)
-            print(audio)
-            userinput = r.recognize_google(audio)
-            if "stop" in userinput:
-                output = True
-            return output
-    except sr.RequestError as e:
-        print("Could not request results; {0}".format(e))
-        return output
-    except sr.UnknownValueError:
-        print("unknown error occurred")
-        return output
 
+    global stop_flag
+    global doorReached
 
-def AudioOut(command):
-    engine.say(command)
-    engine.runAndWait()
+    while True:
+        if doorReached:
+            return
+        try:
+            print("listening for stop command")
+            with sr.Microphone() as source:
+                r.adjust_for_ambient_noise(source, duration=0.5)
+                audio = r.listen(source)
+                userinput = r.recognize_google(audio)
+                print("user said:", userinput)
+                if "stop" in userinput.lower():
+                    stop_flag = True
+                    return
+        except sr.RequestError as e:
+            print("Could not request results; {0}".format(e))
+        except sr.UnknownValueError:
+            print("unknown error occurred")
 
 
 def detect_door_proximity(img_w, img_h, box, th=0.9):
-
     x1, x2, y1, y2 = box
     box_w = x2 - x1
     box_h = y2 - y1
-
     box_area = box_w * box_h
-
     screen_area = img_w * img_h
-
     th_area = screen_area * th
 
     print(f"{box_area} : {th_area}")
@@ -134,8 +65,13 @@ def detect_door_proximity(img_w, img_h, box, th=0.9):
         return False
 
 
-def FindDoor():
+def FindAccessPoint(class_id):
+
+    global stop_flag
+    global doorReached
+
     print("finding door")
+
     loopFlag = True
     doorFound = False
     prevDoorFound = None
@@ -155,7 +91,11 @@ def FindDoor():
             classes=CLASSIDS,
         )
 
-        # for r in results:
+        # Check if the user wants to stop
+        if stop_flag:
+            print("stopping finding access point")
+            return
+
         r = results[0]
         boxes = r.boxes
         print(f"\n\n*******BOXES*******\n")
@@ -175,29 +115,30 @@ def FindDoor():
             box_center = int((x1 + x2) / 2)
             cam_center = int(640 / 2)
 
-            if cls == 322:
+            if cls == class_id:
                 doorFound = True
                 if box_center in range(cam_center - th, cam_center + th, 1):
                     prevPos = currPos
                     currPos = 0
                     if detect_door_proximity(480, 640, [x1, x2, y1, y2], th=0.6):
-                        engine.say("you have reached the door.")
+                        engine.say(f"you have reached the {CLASSNAMES[class_id]}.")
+                        doorReached = True
                         engine.runAndWait()
                         return
                     if currPos != prevPos:
-                        engine.say("door in center. walk ahead.")
+                        engine.say(f"{CLASSNAMES[class_id]} in center. walk ahead.")
 
                 elif box_center < cam_center - th:
                     prevPos = currPos
                     currPos = -1
                     if currPos != prevPos:
-                        engine.say("door on left")
+                        engine.say(f"{CLASSNAMES[class_id]} on left. turn a bit left.")
 
                 elif box_center > cam_center + th:
                     prevPos = currPos
                     currPos = 1
                     if currPos != prevPos:
-                        engine.say("door on right. turn a bit right")
+                        engine.say(f"{CLASSNAMES[class_id]} on right. turn a bit right")
 
             else:
                 print("class number=", cls, CLASSNAMES[cls])
@@ -209,49 +150,53 @@ def FindDoor():
                     noDoorCount = 0
                 if currPos == 0:
                     if box_center in range(cam_center - th, cam_center + th, 1):
-                        engine.say("There is something in front of the door")
+                        engine.say(
+                            f"There is a {CLASSNAMES[cls]} in front of the {CLASSNAMES[class_id]}"
+                        )
 
         if not doorFound and doorFound != prevDoorFound:
 
             prevDoorFound = doorFound
 
         else:
-            if notFoundCount == 5:
+            if notFoundCount == 10:
                 notFoundCount = 0
             else:
                 notFoundCount += 1
             if notFoundCount == 0 and not doorFound:
-                engine.say("door not found. look and move around")
+                engine.say(f"{CLASSNAMES[class_id]} not found. look and move around")
 
         engine.runAndWait()
-    return doorFound
 
-
-def FreeRoam():
-    # keep informing user about obstacles in the way
-    print("free roaming")
-    pass
-
-
-access_req = False
-roam_req = False
 
 while True:
+
+    acc_pt_id = None
+
     try:
         with sr.Microphone() as source:
             print("listening...\n")
-            userinput = AudioIn()
+            userinput = AudioIn(r, sr, source)
             if not userinput:
                 continue
             for word in ACCESS_POINTS:
                 if word in userinput.lower():
                     access_req = True
+                    if word == "stairs":
+                        acc_pt_id = 489
+                    else:
+                        acc_pt_id = 164
+
+                    # acc_pt_id = 322  # to be removed later
 
             if access_req:
-                door = FindDoor()
+                stop_flag = False
+                stop_thread = threading.Thread(target=StopLooking)
+                stop_thread.start()
+                FindAccessPoint(acc_pt_id)
+                stop_thread.join()
                 access_req = False
             elif roam_req:
-                FreeRoam(cam, model)
                 roam_req = False
 
     except sr.RequestError as e:
