@@ -98,7 +98,6 @@ def FindAccessPoint(class_id):
 
         r = results[0]
         boxes = r.boxes
-        print(f"\n\n*******BOXES*******\n")
 
         for box in boxes:
             cls = int(box.cls[0])
@@ -121,23 +120,27 @@ def FindAccessPoint(class_id):
                     prevPos = currPos
                     currPos = 0
                     if detect_door_proximity(480, 640, [x1, x2, y1, y2], th=0.6):
+                        print(f"you have reached the {CLASSNAMES[class_id]}.")
                         engine.say(f"you have reached the {CLASSNAMES[class_id]}.")
                         doorReached = True
                         engine.runAndWait()
                         return
                     if currPos != prevPos:
+                        print(f"{CLASSNAMES[class_id]} in center. walk ahead.")
                         engine.say(f"{CLASSNAMES[class_id]} in center. walk ahead.")
 
                 elif box_center < cam_center - th:
                     prevPos = currPos
                     currPos = -1
                     if currPos != prevPos:
+                        print(f"{CLASSNAMES[class_id]} on left. turn a bit left.")
                         engine.say(f"{CLASSNAMES[class_id]} on left. turn a bit left.")
 
                 elif box_center > cam_center + th:
                     prevPos = currPos
                     currPos = 1
                     if currPos != prevPos:
+                        print(f"{CLASSNAMES[class_id]} on right. turn a bit right")
                         engine.say(f"{CLASSNAMES[class_id]} on right. turn a bit right")
 
             else:
@@ -150,6 +153,9 @@ def FindAccessPoint(class_id):
                     noDoorCount = 0
                 if currPos == 0:
                     if box_center in range(cam_center - th, cam_center + th, 1):
+                        print(
+                            f"There is a {CLASSNAMES[cls]} in front of the {CLASSNAMES[class_id]}"
+                        )
                         engine.say(
                             f"There is a {CLASSNAMES[cls]} in front of the {CLASSNAMES[class_id]}"
                         )
@@ -164,6 +170,7 @@ def FindAccessPoint(class_id):
             else:
                 notFoundCount += 1
             if notFoundCount == 0 and not doorFound:
+                print(f"{CLASSNAMES[class_id]} not found. look and move around")
                 engine.say(f"{CLASSNAMES[class_id]} not found. look and move around")
 
         engine.runAndWait()
@@ -179,6 +186,7 @@ while True:
             userinput = AudioIn(r, sr, source)
             if not userinput:
                 continue
+            print(userinput)
             for word in ACCESS_POINTS:
                 if word in userinput.lower():
                     access_req = True

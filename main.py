@@ -97,7 +97,6 @@ def StopLooking():
         with sr.Microphone() as source:
             r.adjust_for_ambient_noise(source, duration=0.5)
             audio = r.listen(source)
-            print(audio)
             userinput = r.recognize_google(audio)
             if "stop" in userinput:
                 output = True
@@ -127,7 +126,6 @@ def detect_door_proximity(img_w, img_h, box, th=0.9):
 
     th_area = screen_area * th
 
-    print(f"{box_area} : {th_area}")
     if box_area >= th_area:
         return True
     else:
@@ -158,7 +156,6 @@ def FindDoor():
         # for r in results:
         r = results[0]
         boxes = r.boxes
-        print(f"\n\n*******BOXES*******\n")
 
         for box in boxes:
             cls = int(box.cls[0])
